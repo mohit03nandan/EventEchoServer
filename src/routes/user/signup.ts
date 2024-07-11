@@ -1,8 +1,10 @@
 import { Request, Response, Router } from "express";
-import axios from "axios"
-import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
+import axios from "axios";
+import jwt from "jsonwebtoken";
+import dotenv from "dotenv";
 import UserSignupSchema from "../../middleware/User/SignupAuth";
+import { PrismaClient } from "@prisma/client";
+const prisma = new PrismaClient();
 
 dotenv.config();
 
@@ -15,76 +17,104 @@ const REDIRECT_URI = process.env.REDIRECT_URI!;
 
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET is not defined in environment variables");
-}else{
-  console.log("JWT_SECRET is defined",JWT_SECRET);
- 
+} else {
+  console.log("JWT_SECRET is defined", JWT_SECRET);
 }
 
-
-router.get('/auth/google', (req: Request, res: Response) => {
+router.get("/auth/google", (req: Request, res: Response) => {
   const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&response_type=code&scope=profile email`;
   res.redirect(url);
 });
 
-router.get('/auth/google/callback', async (req: Request, res: Response) => {
+router.get("/auth/google/callback", async (req: Request, res: Response) => {
   const { code } = req.query;
 
   try {
     if (!code) {
-      throw new Error('No authorization code received');
+      throw new Error("No authorization code received");
     }
 
-    const { data } = await axios.post('https://oauth2.googleapis.com/token', {
+    const { data } = await axios.post("https://oauth2.googleapis.com/token", {
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
       code,
       redirect_uri: REDIRECT_URI,
-      grant_type: 'authorization_code',
+      grant_type: "authorization_code",
     });
 
     const { access_token, id_token } = data;
 
     // Fetch user profile with access_token
-    const { data: profile } = await axios.get('https://www.googleapis.com/oauth2/v1/userinfo', {
-      headers: { Authorization: `Bearer ${access_token}` },
-    });
+    const { data: profile } = await axios.get(
+      "https://www.googleapis.com/oauth2/v1/userinfo",
+      {
+        headers: { Authorization: `Bearer ${access_token}` },
+      }
+    );
 
     // Generate JWT token
-    const token = jwt.sign({ id: profile.id, email: profile.email }, JWT_SECRET, { expiresIn: '1h' });
-    console.log('Generated JWT token:', token);
+    const token = jwt.sign(
+      { id: profile.id, email: profile.email },
+      JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+    console.log("Generated JWT token:", token);
     res.redirect(`/user/profile?token=${token}`);
   } catch (error) {
-    console.error('Error processing Google OAuth callback:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error processing Google OAuth callback:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-router.get('/profile', (req: Request, res: Response) => {
+router.get("/profile", (req: Request, res: Response) => {
   const token = req.query.token as string;
-  console.log('Received token:', token);
+  console.log("Received token:", token);
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    console.log('Decoded token:', decoded);
-    res.json({ message: 'Profile data', user: decoded });
+    console.log("Decoded token:", decoded);
+    res.json({ message: "Profile data", user: decoded });
   } catch (error) {
-    console.error('Error decoding token:', error);
-    res.status(401).json({ message: 'Invalid token' });
+    console.error("Error decoding token:", error);
+    res.status(401).json({ message: "Invalid token" });
   }
 });
 
-
-
-router.post("/signup", (req: Request, res: Response) => {
+router.post("/signup", async (req: Request, res: Response) => {
   try {
     const response = req.body;
     const validationResult = UserSignupSchema.safeParse(response);
     if (validationResult.success) {
       const { email, firstName, lastName, password } = validationResult.data;
-      console.log("Validated user data:", { email, firstName, lastName, password });
+
+      // Check if user with the same email already exists
+      const existingUser = await prisma.user.findUnique({
+        where: {
+          email,
+        },
+      });
+
+      if (existingUser) {
+        // User already exists
+        return res
+          .status(409)
+          .json({ error: "User already exists with this email" });
+      }
+
+      // User does not exist, proceed with creating a new user
+      const newUser = await prisma.user.create({
+        data: {
+          email,
+          firstName,
+          lastName,
+          password,
+        },
+      });
+
+      console.log("Created new user:", newUser);
 
       // Generate JWT token
-      const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: '1h' });
+      const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "1h" });
       console.log("Generated JWT token:", token);
 
       res.status(200).json({ token });
