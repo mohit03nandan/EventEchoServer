@@ -51,6 +51,24 @@ router.get("/auth/google/callback", async (req: Request, res: Response) => {
         headers: { Authorization: `Bearer ${access_token}` },
       }
     );
+   
+         // Check if user exists in the database
+    let user = await prisma.user.findUnique({
+      where: {
+        email: profile.email as string,
+      },
+    });
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          googleId: profile.id as string,
+          email: profile.email as string,
+          firstName: profile.given_name,
+          lastName: profile.family_name,
+        },
+      });
+    }
 
     // Generate JWT token
     const token = jwt.sign(
@@ -78,6 +96,7 @@ router.get("/profile", (req: Request, res: Response) => {
     console.error("Error decoding token:", error);
     res.status(401).json({ message: "Invalid token" });
   }
+
 });
 
 router.post("/signup", async (req: Request, res: Response) => {
