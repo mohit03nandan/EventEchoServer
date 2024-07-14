@@ -131,7 +131,7 @@ router.post("/signup", async (req: Request, res: Response) => {
         },
       });
 
-      console.log("Created new user:", newUser);
+      console.log("Created new user password :", newUser);
 
       // Generate JWT token
       const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "1h" });
