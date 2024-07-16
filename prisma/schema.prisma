@@ -10,22 +10,45 @@ datasource db {
 
 
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
+  id        Int       @id @default(autoincrement())
+  email     String    @unique
   firstName String?
   lastName  String?
   password  String?  
   googleId  String? 
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
+  bookings  Booking[]
 }
-
 
 model Admin {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  firstName String?
-  lastName  String?
-  password  String?  
-  googleId  String? 
-  createdAt DateTime @default(now())
+  id          Int          @id @default(autoincrement())
+  email       String       @unique
+  firstName   String?
+  lastName    String?
+  password    String?  
+  googleId    String? 
+  createdAt   DateTime     @default(now())
+  guesthouses Guesthouse[]
 }
+
+model Guesthouse {
+  id          Int          @id @default(autoincrement())
+  name        String
+  address     String
+  adminId     Int
+  admin       Admin        @relation(fields: [adminId], references: [id])
+  bookings    Booking[]
+}
+
+model Booking {
+  id          Int          @id @default(autoincrement())
+  guesthouseId Int
+  userId      Int
+  startDate   DateTime
+  endDate     DateTime
+  guesthouse  Guesthouse   @relation(fields: [guesthouseId], references: [id])
+  user        User         @relation(fields: [userId], references: [id])
+
+  @@unique([guesthouseId, startDate, endDate])
+}
+
